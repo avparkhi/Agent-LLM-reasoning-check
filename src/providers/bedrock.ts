@@ -203,27 +203,37 @@ export async function createProvider(config: ModelConfig): Promise<ModelProvider
       const latencyMs = performance.now() - startMs;
 
       // Extract response message content blocks
-      const content = response.output?.message?.content ?? [];
+      // Work through `unknown` to avoid discriminated-union TS gymnastics
+      const rawContent: unknown[] =
+        (response.output?.message?.content as unknown[]) ?? [];
 
       // Extract text content — text blocks have a `text` string property
-      const textContent = content
+      const textContent = rawContent
         .filter(
           (b): b is { text: string } =>
-            "text" in b && typeof (b as Record<string, unknown>)["text"] === "string",
+            typeof b === "object" &&
+            b !== null &&
+            "text" in b &&
+            typeof (b as Record<string, unknown>)["text"] === "string",
         )
         .map((b) => b.text)
         .join("\n");
 
       // Extract tool calls — toolUse blocks have a `toolUse` object property
-      const toolCalls: ToolCall[] = content
+      type BedrockToolUseBlock = {
+        toolUse: { toolUseId?: string; name?: string; input?: unknown };
+      };
+      const toolCalls: ToolCall[] = rawContent
         .filter(
-          (b): b is { toolUse: { toolUseId: string; name: string; input: Record<string, unknown> } } =>
+          (b): b is BedrockToolUseBlock =>
+            typeof b === "object" &&
+            b !== null &&
             "toolUse" in b &&
             (b as Record<string, unknown>)["toolUse"] != null,
         )
         .map((b) => ({
-          id: b.toolUse.toolUseId,
-          name: b.toolUse.name,
+          id: b.toolUse.toolUseId ?? `bedrock-tc-${Date.now()}`,
+          name: b.toolUse.name ?? "",
           arguments: (b.toolUse.input ?? {}) as Record<string, unknown>,
         }));
 
