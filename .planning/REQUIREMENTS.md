@@ -72,7 +72,40 @@
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| (filled by roadmap) | | |
+| CFG-01 | Phase 1: Foundation — Types, Config & Agent Loading | Not started |
+| CFG-02 | Phase 1: Foundation — Types, Config & Agent Loading | Not started |
+| CFG-03 | Phase 1: Foundation — Types, Config & Agent Loading | Not started |
+| CFG-04 | Phase 1: Foundation — Types, Config & Agent Loading | Not started |
+| AGT-01 | Phase 1: Foundation — Types, Config & Agent Loading | Not started |
+| AGT-02 | Phase 1: Foundation — Types, Config & Agent Loading | Not started |
+| AGT-03 | Phase 1: Foundation — Types, Config & Agent Loading | Not started |
+| EVL-01 | Phase 2: Model Providers | Not started |
+| EVL-06 | Phase 2: Model Providers | Not started |
+| EVL-07 | Phase 2: Model Providers | Not started |
+| TST-01 | Phase 3: Test Case Generation | Not started |
+| TST-02 | Phase 3: Test Case Generation | Not started |
+| TST-03 | Phase 3: Test Case Generation | Not started |
+| TST-04 | Phase 3: Test Case Generation | Not started |
+| TST-05 | Phase 3: Test Case Generation | Not started |
+| EVL-02 | Phase 4: Evaluation Engine & Evaluators | Not started |
+| EVL-03 | Phase 4: Evaluation Engine & Evaluators | Not started |
+| EVL-04 | Phase 4: Evaluation Engine & Evaluators | Not started |
+| EVL-05 | Phase 4: Evaluation Engine & Evaluators | Not started |
+| OBS-01 | Phase 5: Observability | Not started |
+| OBS-02 | Phase 5: Observability | Not started |
+| OBS-03 | Phase 5: Observability | Not started |
+| OBS-04 | Phase 5: Observability | Not started |
+| OBS-05 | Phase 5: Observability | Not started |
+| RPT-01 | Phase 6: Reports & CLI | Not started |
+| RPT-02 | Phase 6: Reports & CLI | Not started |
+| RPT-03 | Phase 6: Reports & CLI | Not started |
+| RPT-04 | Phase 6: Reports & CLI | Not started |
+| RPT-05 | Phase 6: Reports & CLI | Not started |
+| RPT-06 | Phase 6: Reports & CLI | Not started |
+| CLI-01 | Phase 6: Reports & CLI | Not started |
+| CLI-02 | Phase 6: Reports & CLI | Not started |
+| CLI-03 | Phase 6: Reports & CLI | Not started |
+| CLI-04 | Phase 6: Reports & CLI | Not started |
 
 ---
 *Last updated: 2026-04-10*
