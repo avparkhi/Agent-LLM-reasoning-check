@@ -301,6 +301,252 @@ MLFLOW_TRACKING_URI=http://localhost:5000
 
 ---
 
+## Deployment
+
+### Option 1: Local Development (Recommended to Start)
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/avparkhi/agent-llm-reasoning-check.git
+cd agent-llm-reasoning-check
+
+# 2. Install dependencies
+npm install
+
+# 3. Configure credentials
+cp .env.example .env
+# Edit .env -- only set keys for providers you want to test:
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   OPENAI_API_KEY=sk-...
+
+# 4. Build
+npm run build
+
+# 5. Test with the included example agent
+npx agent-eval evaluate --config examples/configs/eval-config.yaml
+```
+
+### Option 2: Install as Global CLI
+
+```bash
+# Build and link globally
+npm run build
+npm link
+
+# Now use from anywhere
+agent-eval evaluate --config /path/to/your/eval-config.yaml
+```
+
+### Option 3: Use with Your Own Agent
+
+```bash
+# 1. Create your agent module (TypeScript file exporting tools + systemPrompt)
+cat > my-agent.ts << 'EOF'
+export const systemPrompt = "You are a customer support agent...";
+export const tools = [
+  {
+    name: "lookup_order",
+    description: "Look up an order by ID",
+    parameters: {
+      orderId: { type: "string", description: "Order ID", required: true },
+    },
+    execute: (args: { orderId: string }) => ({ status: "shipped", eta: "2 days" }),
+  },
+  {
+    name: "create_ticket",
+    description: "Create a support ticket",
+    parameters: {
+      subject: { type: "string", description: "Ticket subject", required: true },
+      priority: { type: "string", description: "low | medium | high", required: true },
+    },
+    execute: (args: { subject: string; priority: string }) => ({ ticketId: "TK-12345" }),
+  },
+];
+EOF
+
+# 2. Create your eval config
+cat > my-eval.yaml << 'EOF'
+agent:
+  name: "customer-support"
+  systemPrompt: "You are a customer support agent..."
+  module: "./my-agent"
+  tools:
+    - name: "lookup_order"
+      description: "Look up an order by ID"
+      parameters:
+        orderId: { type: "string", description: "Order ID", required: true }
+    - name: "create_ticket"
+      description: "Create a support ticket"
+      parameters:
+        subject: { type: "string", description: "Ticket subject", required: true }
+        priority: { type: "string", description: "low | medium | high", required: true }
+
+models:
+  - provider: "anthropic"
+    modelId: "claude-sonnet-4-20250514"
+    label: "Claude Sonnet"
+  - provider: "openai"
+    modelId: "gpt-4o"
+    label: "GPT-4o"
+
+evaluation:
+  evaluators: ["helpfulness", "coherence", "toolAccuracy", "trajectory"]
+  judgeModel:
+    provider: "anthropic"
+    modelId: "claude-sonnet-4-20250514"
+  runsPerTest: 2
+
+testGeneration:
+  enabled: true
+  numCases: 15
+  categories: ["happy_path", "edge_case", "error_handling"]
+
+observability:
+  otel: { enabled: false }
+  langfuse: { enabled: false }
+  mlflow: { enabled: false }
+
+reporting:
+  outputDir: "./reports"
+  formats: ["markdown", "html"]
+EOF
+
+# 3. Run evaluation
+npx agent-eval evaluate --config my-eval.yaml
+```
+
+### Option 4: Deploy with Observability Stack
+
+```bash
+# Start Jaeger for OTEL traces (Docker)
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4318:4318 \
+  jaegertracing/all-in-one:latest
+
+# Start MLflow for experiment tracking (Docker)
+docker run -d --name mlflow \
+  -p 5000:5000 \
+  ghcr.io/mlflow/mlflow:latest \
+  mlflow server --host 0.0.0.0
+
+# Update your eval config observability section:
+# observability:
+#   otel: { enabled: true, endpoint: "http://localhost:4318" }
+#   mlflow: { enabled: true, trackingUri: "http://localhost:5000", experimentName: "my-agent" }
+
+# Run evaluation
+npx agent-eval evaluate --config my-eval.yaml
+
+# View traces: http://localhost:16686 (Jaeger)
+# Compare models: http://localhost:5000 (MLflow)
+```
+
+---
+
+## Testing
+
+### Run Unit Tests
+
+```bash
+# Run all 24 tests
+npm test
+
+# Run with watch mode (re-runs on file change)
+npm run test:watch
+
+# Run a specific test file
+npx vitest run tests/evaluators.test.ts
+
+# Run with coverage
+npx vitest run --coverage
+```
+
+### What the Tests Cover
+
+| Test File | Tests | What It Validates |
+|-----------|-------|------------------|
+| `config.test.ts` | 5 | Zod schema validation -- valid configs pass, invalid ones fail with clear errors |
+| `evaluators.test.ts` | 7 | Tool accuracy scoring (exact match, partial, zero, skip) and trajectory order matching |
+| `metrics.test.ts` | 4 | Score aggregation, model ranking, best model selection with reasoning |
+| `test-generator.test.ts` | 4 | Test case schema validation and prompt template construction |
+| `cost-tracker.test.ts` | 4 | Cost accumulation, reset, unknown model handling |
+
+### Manual End-to-End Testing
+
+```bash
+# Step 1: Build the project
+npm run build
+
+# Step 2: Type-check (should show 0 errors)
+npm run typecheck
+
+# Step 3: Generate test cases only (verifies test generator + LLM connection)
+npx agent-eval generate --config examples/configs/eval-config.yaml --output test-cases.yaml
+# Inspect test-cases.yaml -- should have categorized test cases with expected tool calls
+
+# Step 4: Run full evaluation (verifies entire pipeline)
+npx agent-eval evaluate --config examples/configs/eval-config.yaml
+# Check ./reports/report.md -- should have model comparison table
+# Check ./reports/report.html -- open in browser, should show charts
+
+# Step 5: Regenerate reports from saved results (verifies report generation independently)
+npx agent-eval report --results ./reports/results.json --format markdown,html
+```
+
+### Testing with Local Models (Free, No API Key)
+
+```bash
+# Install Ollama (https://ollama.com)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull a model
+ollama pull llama3.1:8b
+
+# Create a config that only uses Ollama
+cat > local-eval.yaml << 'EOF'
+agent:
+  name: "calculator"
+  systemPrompt: "You are a calculator assistant."
+  tools:
+    - name: "add"
+      description: "Add two numbers"
+      parameters:
+        a: { type: "number", description: "First number", required: true }
+        b: { type: "number", description: "Second number", required: true }
+
+models:
+  - provider: "ollama"
+    modelId: "llama3.1:8b"
+    label: "Llama 3.1 8B (local)"
+
+evaluation:
+  evaluators: ["helpfulness", "coherence", "toolAccuracy"]
+  judgeModel:
+    provider: "ollama"
+    modelId: "llama3.1:8b"
+  runsPerTest: 1
+
+testGeneration:
+  enabled: true
+  numCases: 5
+  categories: ["happy_path", "edge_case"]
+
+observability:
+  otel: { enabled: false }
+  langfuse: { enabled: false }
+  mlflow: { enabled: false }
+
+reporting:
+  outputDir: "./reports"
+  formats: ["markdown"]
+EOF
+
+npx agent-eval evaluate --config local-eval.yaml
+```
+
+---
+
 ## Development
 
 ```bash
