@@ -1,0 +1,194 @@
+# ============================================================================
+# Example Evaluation Config — Calculator Agent
+# ============================================================================
+# This configuration evaluates a simple calculator agent across multiple
+# LLM providers. Copy and adapt for your own agent.
+
+agent:
+  name: calculator-agent
+  description: >
+    A simple calculator agent that can perform basic arithmetic operations
+    (add, subtract, multiply, divide) via tool calls.
+  systemPrompt: >
+    You are a helpful calculator assistant. When the user asks you to
+    perform a calculation, use the appropriate tool to compute the result.
+    Always use a tool for arithmetic — never compute results yourself.
+    Return the result in a clear, concise sentence.
+  tools:
+    - name: add
+      description: Add two numbers together
+      parameters:
+        a:
+          type: number
+          description: The first operand
+          required: true
+        b:
+          type: number
+          description: The second operand
+          required: true
+
+    - name: subtract
+      description: Subtract the second number from the first
+      parameters:
+        a:
+          type: number
+          description: The number to subtract from
+          required: true
+        b:
+          type: number
+          description: The number to subtract
+          required: true
+
+    - name: multiply
+      description: Multiply two numbers together
+      parameters:
+        a:
+          type: number
+          description: The first factor
+          required: true
+        b:
+          type: number
+          description: The second factor
+          required: true
+
+    - name: divide
+      description: Divide the first number by the second
+      parameters:
+        a:
+          type: number
+          description: The dividend
+          required: true
+        b:
+          type: number
+          description: The divisor (must not be zero)
+          required: true
+
+# Models to evaluate the agent against
+models:
+  - provider: bedrock
+    modelId: anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet (Bedrock)
+    params:
+      maxTokens: 1024
+      temperature: 0
+
+  - provider: anthropic
+    modelId: claude-sonnet-4-20250514
+    label: Claude Sonnet 4 (Anthropic API)
+    params:
+      max_tokens: 1024
+      temperature: 0
+
+  - provider: openai
+    modelId: gpt-4o
+    label: GPT-4o
+    params:
+      max_tokens: 1024
+      temperature: 0
+
+# Evaluation settings
+evaluation:
+  evaluators:
+    - tool_call_accuracy
+    - factual_accuracy
+    - response_quality
+  judgeModel:
+    provider: anthropic
+    modelId: claude-sonnet-4-20250514
+    label: Judge (Claude Sonnet 4)
+    params:
+      max_tokens: 2048
+      temperature: 0
+  runsPerTest: 3
+
+# Test generation (uses LLM to create additional test cases)
+testGeneration:
+  enabled: true
+  numCases: 10
+  categories:
+    - happy_path
+    - edge_case
+    - error_handling
+
+# Inline test cases
+testCases:
+  - id: calc-add-basic
+    name: Basic addition
+    category: happy_path
+    input: What is 2 + 3?
+    expectedToolCalls:
+      - add
+    expectedFacts:
+      - "5"
+    difficulty: easy
+
+  - id: calc-divide-zero
+    name: Division by zero
+    category: edge_case
+    input: What is 10 divided by 0?
+    expectedToolCalls:
+      - divide
+    difficulty: medium
+
+  - id: calc-multi-step
+    name: Multi-step calculation
+    category: happy_path
+    input: What is (4 + 6) * 3?
+    expectedToolCalls:
+      - add
+      - multiply
+    expectedFacts:
+      - "30"
+    difficulty: hard
+
+  - id: calc-subtract-negative
+    name: Subtraction resulting in negative
+    category: edge_case
+    input: What is 3 minus 7?
+    expectedToolCalls:
+      - subtract
+    expectedFacts:
+      - "-4"
+    difficulty: easy
+
+  - id: calc-multi-turn-01
+    name: Multi-turn follow-up
+    category: multi_turn
+    input: What is 12 * 5?
+    expectedToolCalls:
+      - multiply
+    expectedFacts:
+      - "60"
+    multiTurn:
+      - role: user
+        content: What is 12 * 5?
+      - role: assistant
+        content: The result of 12 * 5 is 60.
+      - role: user
+        content: Now divide that result by 4.
+    difficulty: medium
+
+  - id: calc-error-no-tool
+    name: Non-calculation request
+    category: error_handling
+    input: Tell me a joke about math.
+    difficulty: easy
+
+# Observability
+observability:
+  otel:
+    enabled: false
+    endpoint: http://localhost:4318/v1/traces
+  langfuse:
+    enabled: false
+  mlflow:
+    enabled: false
+    trackingUri: ${MLFLOW_TRACKING_URI}
+    experimentName: calculator-agent-eval
+
+# Reporting
+reporting:
+  outputDir: ./reports
+  formats:
+    - markdown
+    - html
