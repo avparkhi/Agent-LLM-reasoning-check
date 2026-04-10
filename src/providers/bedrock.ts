@@ -10,9 +10,11 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
   type ConverseCommandInput,
+  type ConverseCommandOutput,
   type ContentBlock,
   type SystemContentBlock,
   type Message as BedrockMessage,
+  type Tool,
 } from "@aws-sdk/client-bedrock-runtime";
 import type {
   ModelConfig,
@@ -54,7 +56,8 @@ function toBedrockMessages(messages: Message[]): BedrockMessage[] {
           toolUse: {
             toolUseId: tc.id,
             name: tc.name,
-            input: tc.arguments,
+            // Bedrock expects __DocumentType; cast via unknown
+            input: tc.arguments as unknown as import("@smithy/types").DocumentType,
           },
         });
       }
@@ -87,7 +90,7 @@ function toBedrockMessages(messages: Message[]): BedrockMessage[] {
 }
 
 /**
- * Extract the system prompt string from the message list, if any.
+ * Extract the system content blocks from the message list, if any.
  */
 function extractSystemBlocks(messages: Message[]): SystemContentBlock[] | undefined {
   const systemMsg = messages.find((m) => m.role === "system");
@@ -101,17 +104,20 @@ function extractSystemBlocks(messages: Message[]): SystemContentBlock[] | undefi
 function toBedrockToolConfig(tools: ToolSpec[]): ConverseCommandInput["toolConfig"] {
   if (!tools || tools.length === 0) return undefined;
 
-  return {
-    tools: tools.map((t) => ({
-      toolSpec: {
-        name: t.name,
-        description: t.description,
-        inputSchema: {
-          json: t.inputSchema,
-        },
+  const bedrockTools: Tool[] = tools.map((t) => ({
+    toolSpec: {
+      name: t.name,
+      description: t.description,
+      inputSchema: {
+        // ToolInputSchema.JsonMember expects __DocumentType; cast via unknown
+        json: t.inputSchema as unknown as import("@smithy/types").DocumentType,
       },
-    })),
-  };
+    },
+  // The Bedrock SDK Tool type is a discriminated union; the TS compiler
+  // flags missing $unknown keys, but at runtime only one key is needed.
+  }) as Tool);
+
+  return { tools: bedrockTools };
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +194,7 @@ export async function createProvider(config: ModelConfig): Promise<ModelProvider
       };
 
       const startMs = performance.now();
-      let response: Awaited<ReturnType<typeof client.send>>;
+      let response: ConverseCommandOutput;
       try {
         response = await client.send(new ConverseCommand(input));
       } catch (err) {
@@ -196,21 +202,24 @@ export async function createProvider(config: ModelConfig): Promise<ModelProvider
       }
       const latencyMs = performance.now() - startMs;
 
-      // Extract response message
-      const outputMessage = response.output?.message;
-      const content = outputMessage?.content ?? [];
+      // Extract response message content blocks
+      const content = response.output?.message?.content ?? [];
 
-      // Extract text content
+      // Extract text content — text blocks have a `text` string property
       const textContent = content
-        .filter((b): b is { text: string } => "text" in b && typeof (b as { text?: unknown }).text === "string")
+        .filter(
+          (b): b is { text: string } =>
+            "text" in b && typeof (b as Record<string, unknown>)["text"] === "string",
+        )
         .map((b) => b.text)
         .join("\n");
 
-      // Extract tool calls
+      // Extract tool calls — toolUse blocks have a `toolUse` object property
       const toolCalls: ToolCall[] = content
         .filter(
           (b): b is { toolUse: { toolUseId: string; name: string; input: Record<string, unknown> } } =>
-            "toolUse" in b && b.toolUse != null,
+            "toolUse" in b &&
+            (b as Record<string, unknown>)["toolUse"] != null,
         )
         .map((b) => ({
           id: b.toolUse.toolUseId,

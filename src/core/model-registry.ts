@@ -100,3 +100,33 @@ export class ModelRegistry {
     return `${config.provider}::${config.modelId}::${config.label ?? "default"}`;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Convenience factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Create all providers described by `configs` and return a Map keyed by
+ * each provider's `id` field.
+ *
+ * This is a thin wrapper around `ModelRegistry.createProvider` that handles
+ * the common pattern of bulk-creating every model listed in the eval config.
+ *
+ * @param configs - Array of model configurations from YAML.
+ * @returns A Map<providerId, ModelProvider> with one entry per config.
+ */
+export async function createAllProviders(
+  configs: ModelConfig[],
+): Promise<Map<string, ModelProvider>> {
+  const registry = new ModelRegistry();
+  const map = new Map<string, ModelProvider>();
+
+  await Promise.all(
+    configs.map(async (config) => {
+      const provider = await registry.createProvider(config);
+      map.set(provider.id, provider);
+    }),
+  );
+
+  return map;
+}
